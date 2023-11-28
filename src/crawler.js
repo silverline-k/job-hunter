@@ -1,4 +1,5 @@
 import puppeteer from 'puppeteer';
+import userAgent from 'user-agents';
 
 export default class Crawler {
     constructor(config) {
@@ -12,37 +13,38 @@ export default class Crawler {
 
     // TODO: 함수명 변경
     async getWantedJobList() {
-        // 새로운 브라우저 열기
-        const browser = await puppeteer.launch({
-            headless: 'new',
-        });
+        // Launch the browser and open a new blank page
+        const browser = await puppeteer.launch({ headless: 'new' });
         const page = await browser.newPage();
 
-        const wantedUrl = this.config.url.wanted;
+        // user agent 설정 안하면 403 뜸
+        await page.setUserAgent(userAgent.random().toString());
+        await page.goto(this.config.url.wanted);
 
-        console.log(wantedUrl);
-        await page.goto(wantedUrl);
+        const jobListHandle = await page.$('[data-cy="job-list"]');
+        const jobCardHandle = await jobListHandle.$$('[data-cy="job-card"]');
 
-        // 페이지가 로드될 때까지 대기
-        await page.waitForNavigation();
-        // await page.waitForSelector('[data-cy="job-list"]', {timeout: 1000});
+        const arr = [];
+        for (const jobCards of jobCardHandle) {
+            const companyName = await jobCards.$eval(
+                '.job-card-company-name',
+                (el) => el.innerHTML
+            );
+            const position = await jobCards.$eval(
+                '.job-card-position',
+                (el) => el.innerHTML
+            );
+            const location = await jobCards.$eval(
+                '.job-card-company-location',
+                (el) => el.innerHTML
+            );
 
-        const jobList = await page.$('[data-cy="job-list"]');
-        if (jobList) {
-            const jobs = [];
-            const jobItems = await jobList.$$('li');
-
-            for (const item of jobItems) {
-                const jobCard = await item.$('[data-cy="job-card"]');
-                console.log('job-card', jobCard);
-            }
-        } else {
-            console.error('해당 요소를 찾을 수 없습니다.');
+            arr.push({
+                companyName,
+                position,
+                location: location.split('<')[0],
+            });
         }
-
-        console.log('job list', jobList);
-
-        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         await browser.close();
     }
