@@ -25,24 +25,28 @@ export default class Crawler {
         const jobCardHandle = await jobListHandle.$$('[data-cy="job-card"]');
 
         const arr = [];
-        for (const jobCards of jobCardHandle) {
-            const companyName = await jobCards.$eval(
+        for (const jobCard of jobCardHandle) {
+            const positionId = await jobCard.$eval('a', (el) => el.getAttribute('data-position-id'));
+            const companyName = await jobCard.$eval(
                 '.job-card-company-name',
                 (el) => el.innerHTML
             );
-            const position = await jobCards.$eval(
+            const position = await jobCard.$eval(
                 '.job-card-position',
                 (el) => el.innerHTML
             );
-            const location = await jobCards.$eval(
+            const location = await jobCard.$eval(
                 '.job-card-company-location',
                 (el) => el.innerHTML
             );
+            const url = await jobCard.$eval('a', (el) => el.href);
 
             arr.push({
+                id: positionId,
                 companyName,
                 position,
                 location: location.split('<')[0],
+                url,
             });
         }
 
