@@ -26,7 +26,7 @@ export default class Crawler {
         // Launch the browser and open a new blank page
         const browser = await puppeteer.launch({
             headless: 'new',
-            ignoreHTTPSErrors: true
+            ignoreHTTPSErrors: this.config.mode === 'development' ? true : false,
         });
         const page = await browser.newPage();
 
