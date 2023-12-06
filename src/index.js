@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import Crawler from './crawler.js';
 
 async function start() {
+    console.info('Starting The Job Hunter')
+
     const config = yaml.load(
         readFileSync(resolve('src', '../config.yml'), 'utf8')
     );
@@ -15,7 +17,7 @@ async function start() {
 }
 
 start()
-    .then(() => console.info('Starting The Job Hunter'))
+    .then()
     .catch((err) => {
         console.error(err);
         exit(1);
