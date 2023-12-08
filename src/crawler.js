@@ -4,18 +4,21 @@ import userAgent from 'user-agents';
 // TODO: 일단 기존 공고 메모리에 저장. 추후 DB 저장으로 변경
 // TODO: 날짜 기준으로 가져올 수 있는지 확인하기, 가능하면 API 추가
 export default class Crawler {
-    constructor(config) {
+    constructor(config, db) {
         this.config = config;
+        this.db = db;
     }
 
     async run() {
         // this.init();
         // TODO: scheduler로 변경해야 함
+        const rows = await this.db.query(`SELECT * FROM listing`);
+        console.log(rows);
         await this.getWantedJobList();
     }
 
     // TODO: 데이터 없을 때 해당 페이지 데이터 끝까지 가져오기
-    // TODO: 하루에 한 번씩 DB에 저장되어 있는 채용 공고 중 마감인 공고 업데이트하기
+    // TODO: 하루에 한 번씩 DB에 저장되어 있는 채용 공고 중 마감인 공고 업데이트하기 - 테이블 이름 job-listings
     init() {
         this.init = true;
     }
@@ -74,7 +77,7 @@ export default class Crawler {
         }
 
         console.log(new Date(), 'scroll finish!');
-        console.log('total:', arr.length, ' last data:', arr[arr.length - 1]);
+        console.log('total:', jobList.length, ' last data:', jobList[jobList.length - 1]);
 
         await browser.close();
 

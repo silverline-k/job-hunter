@@ -1,2 +1,9 @@
+mode: 'development'
 url:
   wanted: 'https://www.wanted.co.kr/wdlist/518/895?country=kr&job_sort=job.latest_order&years=-1&locations=all'
+db:
+  host: 'localhost'
+  user: ''
+  password: ''
+  database: 'job_hunter'
+  port: 3306
