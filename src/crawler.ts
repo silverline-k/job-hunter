@@ -1,19 +1,23 @@
 import puppeteer, { Page } from 'puppeteer';
 import userAgent from 'user-agents';
+import { Pool } from 'mysql2/promise';
 import { Config } from './types/config';
 
 // TODO: 일단 기존 공고 메모리에 저장. 추후 DB 저장으로 변경
 // TODO: 날짜 기준으로 가져올 수 있는지 확인하기, 가능하면 API 추가
 export default class Crawler {
     config: Config;
+    db: Pool;
     refresh: boolean;
 
-    constructor(config: Config) {
+    constructor(config: Config, db: Pool) {
         this.config = config;
+        this.db = db;
         this.refresh = true;
     }
 
     async run() {
+        console.log(await this.db.query(`SELECT now()`));
         // this.init();
         // TODO: scheduler로 변경해야 함
         await this.getWantedJobList();
