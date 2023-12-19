@@ -1,10 +1,11 @@
 import puppeteer, { Page } from 'puppeteer';
 import userAgent from 'user-agents';
+import schedule from 'node-schedule';
 import { Pool } from 'mysql2/promise';
+import { ResultSetHeader } from 'mysql2';
 import { Config } from './types/config';
+import { JobList } from './types/index';
 
-// TODO: 일단 기존 공고 메모리에 저장. 추후 DB 저장으로 변경
-// TODO: 날짜 기준으로 가져올 수 있는지 확인하기, 가능하면 API 추가
 export default class Crawler {
     config: Config;
     db: Pool;
@@ -13,25 +14,73 @@ export default class Crawler {
     constructor(config: Config, db: Pool) {
         this.config = config;
         this.db = db;
+        this.refresh = false;
+    }
+
+    // TODO: 하루에 한 번씩 DB에 저장되어 있는 채용 공고 중 마감인 공고 업데이트하기
+    async init() {
         this.refresh = true;
+
+        const jobList = await Promise.all(await this.getWantedJobList());
+        const newJobsCount = await this.addJobPosting(jobList);
+
+        console.log(`init: ${newJobsCount} job postings have been added.`);
     }
 
     async run() {
         console.log(await this.db.query(`SELECT now()`));
-        // this.init();
-        // TODO: scheduler로 변경해야 함
-        await this.getWantedJobList();
+        const jobList = await Promise.all(await this.getWantedJobList());
+        for (let i = jobList.length - 1; i > jobList.length - 10; i--) {
+            console.log(`${i + 1}:`, jobList[i]);
+        }
+        console.log('length = ', jobList.length);
+
+        // TODO: 페이지 전체 가져와서 저장 중복 시 nothing when 하루에 한 번씩, 서버 시작할 때
+        // TODO: 목록에 없으면 삭제. 해야하는데 문제는 오토스크롤 제대로 안 됐을 때 마감 됐다고 생각해서 다 지워버릴수도 있음
+        // schedule.scheduleJob('* * * * *', async () => {
+        //     await this.init();
+        // });
+
+        // 매 시간마다 새로운 채용 공고 있을 시 DB에 저장
+        schedule.scheduleJob('30 * * * *', async () => {
+            console.log('now: ', new Date());
+        });
+
+        // TODO: 하루에 한 번씩 전체 공고 가져와서 닫힌 공고 삭제
     }
 
-    // TODO: 데이터 없을 때 해당 페이지 데이터 끝까지 가져오기
-    // TODO: 하루에 한 번씩 DB에 저장되어 있는 채용 공고 중 마감인 공고 업데이트하기
-    init() {
-        this.refresh = true;
+    async addJobPosting(jobList: JobList): Promise<number> {
+        const position = 'nodejs';
+        const values = jobList
+            .map((job) => {
+                return `(${job.id}, '${position}', '${job.positionTitle}', '${job.companyName}', '${job.location}', '${job.url}')`;
+            })
+            .join(',');
+
+        try {
+            const result = await this.db.query(`
+                INSERT IGNORE INTO job_hunter.job_posting
+                (
+                    position_index,
+                    position_name,
+                    position_title,
+                    company_name,
+                    company_location,
+                    url
+                )
+                VALUES ${values}
+            `);
+
+            console.log('addJobPosting result =>', result);
+            return (result[0] as unknown as ResultSetHeader).affectedRows;
+        } catch (error) {
+            throw error;
+        }
     }
 
     // TODO: 함수명 변경
     // TODO: 1시간에 한 번씩 가져오기
-    async getWantedJobList() {
+    async getWantedJobList(): Promise<JobList> {
         // Launch the browser and open a new blank page
         const browser = await puppeteer.launch({
             headless: 'new',
@@ -62,39 +111,40 @@ export default class Crawler {
 
         const jobList = [];
         for (const jobCard of jobCardHandle) {
-            const positionId = await jobCard.$eval('a', (el) =>
-                el.getAttribute('data-position-id'),
-            );
+            const positionId: string = await jobCard.$eval('a', (el) => {
+                const id = el.getAttribute('data-position-id');
+                if (id == null) {
+                    throw new Error();
+                }
+
+                return id;
+            });
             const companyName = await jobCard.$eval(
                 '.job-card-company-name',
-                (el) => el.innerHTML,
+                (el) => el.innerHTML
             );
             const position = await jobCard.$eval(
                 '.job-card-position',
-                (el) => el.innerHTML,
+                (el) => el.innerHTML
             );
             const location = await jobCard.$eval(
                 '.job-card-company-location',
-                (el) => el.innerHTML,
+                (el) => el.innerHTML
             );
             const url = await jobCard.$eval('a', (el) => el.href);
 
-            jobList.push({
+            const jobInfo = {
                 id: positionId,
                 companyName,
-                position,
+                positionTitle: position,
                 location: location.split('<')[0],
                 url,
-            });
+            };
+
+            jobList.push(jobInfo);
         }
 
         console.log(new Date(), 'scroll finish!');
-        console.log(
-            'total:',
-            jobList.length,
-            ' last data:',
-            jobList[jobList.length - 1],
-        );
 
         await browser.close();
 
@@ -120,7 +170,7 @@ export default class Crawler {
                 const timer = setInterval(async () => {
                     const scrollHeight = document.body.scrollHeight;
                     console.log(
-                        `check - height: ${scrollHeight}, total: ${totalHeight}`,
+                        `check - height: ${scrollHeight}, total: ${totalHeight}`
                     );
 
                     window.scrollTo(0, scrollHeight);

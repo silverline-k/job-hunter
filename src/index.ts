@@ -19,11 +19,10 @@ async function start() {
     }
 
     const dbConnector = new DBConnector(config as Config);
-    const db = dbConnector.createPool();
+    const crawler = new Crawler(config as Config, dbConnector.pool);
 
-    const crawler = new Crawler(config as Config, db);
-
-    await crawler.run();
+    await crawler.init();
+    // await crawler.run();
 }
 
 start()
