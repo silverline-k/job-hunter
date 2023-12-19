@@ -14,12 +14,14 @@
   "dependencies": {
     "js-yaml": "^4.1.0",
     "mysql2": "^3.6.5",
+    "node-schedule": "^2.1.1",
     "puppeteer": "^21.5.2",
     "user-agents": "^1.1.37"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.4",
+    "@types/node-schedule": "^2.1.5",
     "@types/user-agents": "^1.0.4",
     "nodemon": "^3.0.2",
     "ts-node": "^10.9.2",

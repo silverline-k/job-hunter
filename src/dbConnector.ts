@@ -3,9 +3,11 @@ import { Config } from './types/config';
 
 export default class DBConnector {
     config: Config;
+    pool: Pool;
 
     constructor(config: Config) {
         this.config = config;
+        this.pool = this.createPool();
     }
 
     createPool(): Pool {
@@ -16,6 +18,7 @@ export default class DBConnector {
             database: this.config.db.database,
             port: this.config.db.port,
             connectionLimit: 100,
+            charset: 'utf8mb4'
         });
     }
 }
