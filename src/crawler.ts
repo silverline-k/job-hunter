@@ -1,156 +1,131 @@
-import puppeteer, { Page } from 'puppeteer';
+import puppeteer, { Page, Browser } from 'puppeteer';
 import userAgent from 'user-agents';
-import schedule from 'node-schedule';
-import { Pool } from 'mysql2/promise';
-import { ResultSetHeader } from 'mysql2';
 import { Config } from './types/config';
 import { JobList } from './types/index';
+import Repository from './repository';
 
 export default class Crawler {
     config: Config;
-    db: Pool;
+    repository: Repository;
     refresh: boolean;
 
-    constructor(config: Config, db: Pool) {
+    constructor(config: Config, repository: Repository) {
         this.config = config;
-        this.db = db;
+        this.repository = repository;
         this.refresh = false;
     }
 
-    // TODO: 하루에 한 번씩 DB에 저장되어 있는 채용 공고 중 마감인 공고 업데이트하기
     async init() {
         this.refresh = true;
 
         const jobList = await Promise.all(await this.getWantedJobList());
-        const newJobsCount = await this.addJobPosting(jobList);
+        const newJobsCount = await this.repository.addJobPosting(jobList);
 
         console.log(`init: ${newJobsCount} job postings have been added.`);
     }
 
+    /**
+     * position index 비교 로직 (최근 20개 내림차순으로 가져오는 경우)
+     * - db index가 더 클 경우 저장 X
+     * - wanted index가 더 큰 경우 db index보다 큰 것만 저장
+     * - 20개 전체가 다 클 경우 스크롤 한 번 더 해서 다시 비교 (재귀 함수 사용해야 할 듯)
+     */
     async run() {
-        console.log(await this.db.query(`SELECT now()`));
-        const jobList = await Promise.all(await this.getWantedJobList());
-        for (let i = jobList.length - 1; i > jobList.length - 10; i--) {
-            console.log(`${i + 1}:`, jobList[i]);
-        }
-        console.log('length = ', jobList.length);
+        const lastPositionIndex = await this.repository.getLastPositionIndex(); // 무조건 있음
+        const jobList = await Promise.all(
+            await this.getWantedJobList(lastPositionIndex)
+        );
+        const newJobsCount = await this.repository.addJobPosting(jobList);
 
-        // TODO: 페이지 전체 가져와서 저장 중복 시 nothing when 하루에 한 번씩, 서버 시작할 때
-        // TODO: 목록에 없으면 삭제. 해야하는데 문제는 오토스크롤 제대로 안 됐을 때 마감 됐다고 생각해서 다 지워버릴수도 있음
-        // schedule.scheduleJob('* * * * *', async () => {
-        //     await this.init();
-        // });
-
-        // 매 시간마다 새로운 채용 공고 있을 시 DB에 저장
-        schedule.scheduleJob('30 * * * *', async () => {
-            console.log('now: ', new Date());
-        });
-
-        // TODO: 하루에 한 번씩 전체 공고 가져와서 닫힌 공고 삭제
+        console.log(`run: ${newJobsCount} job postings have been added.`);
     }
 
-    async addJobPosting(jobList: JobList): Promise<number> {
-        const position = 'nodejs';
-        const values = jobList
-            .map((job) => {
-                return `(${job.id}, '${position}', '${job.positionTitle}', '${job.companyName}', '${job.location}', '${job.url}')`;
-            })
-            .join(',');
-
-        try {
-            const result = await this.db.query(`
-                INSERT IGNORE INTO job_hunter.job_posting
-                (
-                    position_index,
-                    position_name,
-                    position_title,
-                    company_name,
-                    company_location,
-                    url
-                )
-                VALUES ${values}
-            `);
-
-            console.log('addJobPosting result =>', result);
-            return (result[0] as unknown as ResultSetHeader).affectedRows;
-        } catch (error) {
-            throw error;
-        }
-    }
-
-    // TODO: 함수명 변경
-    // TODO: 1시간에 한 번씩 가져오기
-    async getWantedJobList(): Promise<JobList> {
-        // Launch the browser and open a new blank page
+    async launch(): Promise<Browser> {
+        // Launch the browser and open a new blank pave
         const browser = await puppeteer.launch({
             headless: 'new',
             ignoreHTTPSErrors:
                 this.config.mode === 'development' ? true : false,
         });
+
+        return browser;
+    }
+
+    async setPage(browser: Browser): Promise<Page> {
         const page = await browser.newPage();
 
         // user agent 설정 해줘야 403 안 뜸
         await page.setUserAgent(new userAgent().random().toString());
         await page.goto(this.config.url.wanted);
 
+        return page;
+    }
+
+    // TODO: 함수명 변경
+    // TODO: 1시간에 한 번씩 가져오기
+    async getWantedJobList(lastPositionIndex?: number): Promise<JobList> {
+        this.refresh = true; // REMOVE
+
+        const browser = await this.launch();
+        const page = await this.setPage(browser);
+
         console.log(new Date(), 'scroll start!');
 
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
 
+        // 서버 시작했을 때, 하루에 한 번 전체 채용 공고 가져올 때만 실행됨
         if (this.refresh) {
             await this.autoScroll(page);
         }
 
-        const jobListHandle = await page.$('[data-cy="job-list"]');
-        if (jobListHandle == null) {
-            // TODO: add error message
-            throw new Error();
-        }
-
-        const jobCardHandle = await jobListHandle.$$('[data-cy="job-card"]');
+        const jobListWrapperSelector = '.JobList_contentWrapper__QiRRW';
+        await page.waitForSelector(jobListWrapperSelector);
 
         const jobList = [];
-        for (const jobCard of jobCardHandle) {
-            const positionId: string = await jobCard.$eval('a', (el) => {
+        const jobCards = await page.$$(
+            `${jobListWrapperSelector} .List_List__FsLch li`
+        );
+
+        for (const jobCard of jobCards) {
+            const jobInfo = await jobCard.$eval('a', (el) => {
                 const id = el.getAttribute('data-position-id');
-                if (id == null) {
+                const companyName = el.getAttribute('data-company-name');
+                const positionTitle = el.getAttribute('data-position-name');
+                const location = ''; // TODO: 태그에서 지역 속성 사라졌음, 어디에서 가져올지 정해야함
+                const url = el.href;
+
+                if (
+                    [id, companyName, positionTitle, location, url].includes(
+                        null
+                    )
+                ) {
                     throw new Error();
                 }
 
-                return id;
-            });
-            const companyName = await jobCard.$eval(
-                '.job-card-company-name',
-                (el) => el.innerHTML
-            );
-            const position = await jobCard.$eval(
-                '.job-card-position',
-                (el) => el.innerHTML
-            );
-            const location = await jobCard.$eval(
-                '.job-card-company-location',
-                (el) => el.innerHTML
-            );
-            const url = await jobCard.$eval('a', (el) => el.href);
+                // if (!this.refresh && lastPositionIndex) {
+                //     // TODO: 재귀함수 처리
+                // } else {
+                //     continue;
+                // }
 
-            const jobInfo = {
-                id: positionId,
-                companyName,
-                positionTitle: position,
-                location: location.split('<')[0],
-                url,
-            };
+                return {
+                    id,
+                    companyName,
+                    positionTitle,
+                    location,
+                    url,
+                };
+            });
 
             jobList.push(jobInfo);
         }
-
+        console.log('total count:', jobList.length);
         console.log(new Date(), 'scroll finish!');
 
         await browser.close();
-
         this.refresh = false;
 
-        return jobList;
+        return jobList as JobList;
     }
 
     // 가져올 수 있는 데이터 다 가져오기

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import Crawler from './crawler';
 import { Config } from './types/config';
 import DBConnector from './dbConnector';
+import Repository from './repository';
 
 async function start() {
     console.info('Starting The Job Hunter');
@@ -19,10 +20,12 @@ async function start() {
     }
 
     const dbConnector = new DBConnector(config as Config);
-    const crawler = new Crawler(config as Config, dbConnector.pool);
+    const repository = new Repository(dbConnector.pool);
+    const crawler = new Crawler(config as Config, repository);
 
-    await crawler.init();
+    // await crawler.init();
     // await crawler.run();
+    await crawler.getWantedJobList();
 }
 
 start()
