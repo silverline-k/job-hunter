@@ -1,4 +1,4 @@
-export type Config = {
+export interface Config {
     mode: string;
     url: {
         wanted: string;
@@ -10,4 +10,4 @@ export type Config = {
         database: string;
         port: number;
     }
-};
+}

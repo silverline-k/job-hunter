@@ -24,8 +24,7 @@ async function start() {
     const crawler = new Crawler(config as Config, repository);
 
     // await crawler.init();
-    // await crawler.run();
-    await crawler.getWantedJobList();
+    await crawler.run();
 }
 
 start()
