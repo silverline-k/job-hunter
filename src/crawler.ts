@@ -1,51 +1,29 @@
 import puppeteer, { Page, Browser } from 'puppeteer';
 import userAgent from 'user-agents';
 import { Config } from './types/config';
-import { JobList } from './types/index';
+import { JobInfo, JobList, PositionIndex } from './types/index';
 import Repository from './repository';
 
 export default class Crawler {
     config: Config;
     repository: Repository;
-    refresh: boolean;
 
     constructor(config: Config, repository: Repository) {
         this.config = config;
         this.repository = repository;
-        this.refresh = false;
-    }
-
-    async init() {
-        this.refresh = true;
-
-        const jobList = await Promise.all(await this.getWantedJobList());
-        const newJobsCount = await this.repository.addJobPosting(jobList);
-
-        console.log(`init: ${newJobsCount} job postings have been added.`);
-    }
-
-    /**
-     * position index 비교 로직 (최근 20개 내림차순으로 가져오는 경우)
-     * - db index가 더 클 경우 저장 X
-     * - wanted index가 더 큰 경우 db index보다 큰 것만 저장
-     * - 20개 전체가 다 클 경우 스크롤 한 번 더 해서 다시 비교 (재귀 함수 사용해야 할 듯)
-     */
-    async run() {
-        const lastPositionIndex = await this.repository.getLastPositionIndex(); // 무조건 있음
-        const jobList = await Promise.all(
-            await this.getWantedJobList(lastPositionIndex)
-        );
-        const newJobsCount = await this.repository.addJobPosting(jobList);
-
-        console.log(`run: ${newJobsCount} job postings have been added.`);
     }
 
     async launch(): Promise<Browser> {
-        // Launch the browser and open a new blank pave
         const browser = await puppeteer.launch({
             headless: 'new',
             ignoreHTTPSErrors:
                 this.config.mode === 'development' ? true : false,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+            ],
         });
 
         return browser;
@@ -58,33 +36,96 @@ export default class Crawler {
         await page.setUserAgent(new userAgent().random().toString());
         await page.goto(this.config.url.wanted);
 
+        page.on('console', (msg) => {
+            const msgText = msg.text();
+            if (msgText.startsWith('check')) {
+                console.log('received msg:', msgText);
+            }
+        });
+
         return page;
     }
 
-    // TODO: 함수명 변경
-    // TODO: 1시간에 한 번씩 가져오기
-    async getWantedJobList(lastPositionIndex?: number): Promise<JobList> {
-        this.refresh = true; // REMOVE
+    async run() {
+        let newJobsCount = 0;
+        let closedJobsCount = 0;
 
+        const positionIndexesFromDB =
+            await this.repository.getPositionIndexes();
+        const positionIndexesFromWanted =
+            await this.getPositionIndexesFromWanted();
+
+        const newIndexes = new Set<PositionIndex>();
+        const closedIndexes = new Set<PositionIndex>(positionIndexesFromDB);
+
+        positionIndexesFromDB.forEach((index) => {
+            if (positionIndexesFromWanted.has(index)) {
+                closedIndexes.delete(index);
+            }
+        });
+
+        positionIndexesFromWanted.forEach((index) => {
+            if (!positionIndexesFromDB.has(index)) {
+                newIndexes.add(index);
+            }
+        });
+
+        console.log(`from db => ${positionIndexesFromDB.size} | from wanted => ${positionIndexesFromWanted.size} | new => ${newIndexes.size} | close => ${closedIndexes.size}`);
+
+        // TODO: JD 긁어오기
+
+        if (closedIndexes.size > 0) {
+            closedJobsCount = await this.repository.deleteJobPosting(Array.from(closedIndexes.values()));
+            console.log('close count =>', closedJobsCount);
+        }
+        if (newIndexes.size > 0) {
+            // newJobsCount = await this.repository.addJobPosting([]);
+        }
+
+        console.log(`run: ${newJobsCount} job postings have been added.`);
+        console.log(`run: ${closedJobsCount} job postings have been closed.`);
+    }
+
+    async getPositionIndexesFromWanted(): Promise<Set<PositionIndex>> {
         const browser = await this.launch();
         const page = await this.setPage(browser);
 
         console.log(new Date(), 'scroll start!');
 
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 3000));
 
-        // 서버 시작했을 때, 하루에 한 번 전체 채용 공고 가져올 때만 실행됨
-        if (this.refresh) {
-            await this.autoScroll(page);
-        }
-
-        const jobListWrapperSelector = '.JobList_contentWrapper__QiRRW';
+        const jobListWrapperSelector =
+            '.JobList_contentWrapper__QiRRW .List_List__FsLch li';
         await page.waitForSelector(jobListWrapperSelector);
 
-        const jobList = [];
-        const jobCards = await page.$$(
-            `${jobListWrapperSelector} .List_List__FsLch li`
-        );
+        await this.autoScroll(page);
+
+        const positionIndexList: PositionIndex[] = [];
+
+        const jobCards = await page.$$(jobListWrapperSelector);
+        for (const jobCard of jobCards) {
+            const positionIndex = await jobCard.$eval('a', (el) => {
+                return el.getAttribute('data-position-id');
+            });
+
+            if (positionIndex !== null) {
+                positionIndexList.push(Number(positionIndex));
+            }
+        }
+
+        console.log(new Date(), 'scroll finish!');
+
+        await browser.close();
+
+        return new Set(positionIndexList);
+    }
+
+    async getJobCardsFromWanted(page: Page, element: string) {
+        await page.waitForSelector(element);
+
+        const jobList: JobList = [];
+        const jobCards = await page.$$(element);
+        console.log(jobCards);
 
         for (const jobCard of jobCards) {
             const jobInfo = await jobCard.$eval('a', (el) => {
@@ -99,14 +140,11 @@ export default class Crawler {
                         null
                     )
                 ) {
+                    // TODO: add error message
                     throw new Error();
                 }
 
-                // if (!this.refresh && lastPositionIndex) {
-                //     // TODO: 재귀함수 처리
-                // } else {
-                //     continue;
-                // }
+                console.log('check', id);
 
                 return {
                     id,
@@ -117,30 +155,47 @@ export default class Crawler {
                 };
             });
 
-            jobList.push(jobInfo);
+            if (jobInfo !== null) {
+                jobList.push(jobInfo as JobInfo);
+            }
         }
-        console.log('total count:', jobList.length);
+
+        return jobList;
+    }
+
+    async getJobListFromWanted(): Promise<JobList> {
+        const browser = await this.launch();
+        const page = await this.setPage(browser);
+
+        console.log(new Date(), 'scroll start!');
+
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+
+        const jobListWrapperSelector =
+            '.JobList_contentWrapper__QiRRW .List_List__FsLch li';
+        await page.waitForSelector(jobListWrapperSelector);
+
+        await this.autoScroll(page);
+
+        const jobList = await this.getJobCardsFromWanted(
+            page,
+            jobListWrapperSelector
+        );
+
         console.log(new Date(), 'scroll finish!');
 
         await browser.close();
-        this.refresh = false;
 
         return jobList as JobList;
     }
 
-    // 가져올 수 있는 데이터 다 가져오기
     async autoScroll(page: Page) {
-        page.on('console', (msg) => {
-            const msgText = msg.text();
-            if (msgText.startsWith('check')) {
-                console.log('received msg:', msgText);
-            }
-        });
-
         await page.evaluate(async () => {
-            await new Promise((resolve) => {
+            await new Promise(async (resolve) => {
                 let totalHeight = 0;
-                let tryCount = 0;
+
+                window.scrollTo(0, 2000);
+                await new Promise((resolve) => setTimeout(resolve, 3000));
 
                 const timer = setInterval(async () => {
                     const scrollHeight = document.body.scrollHeight;
@@ -148,23 +203,15 @@ export default class Crawler {
                         `check - height: ${scrollHeight}, total: ${totalHeight}`
                     );
 
-                    window.scrollTo(0, scrollHeight);
-                    await new Promise((resolve) => setTimeout(resolve, 2000));
+                    window.scrollBy(0, scrollHeight);
 
                     if (totalHeight === scrollHeight) {
-                        console.log('total', scrollHeight);
-
-                        if (tryCount === 2) {
-                            clearInterval(timer);
-                            resolve(true);
-                        }
-
-                        tryCount++;
-                        console.log('try count ===> ', tryCount);
+                        clearInterval(timer);
+                        resolve(true);
                     }
 
                     totalHeight = scrollHeight;
-                }, 3000); // 1000으로 했더니 scrollTo보다 먼저 resolve해버려서 3000으로 수정함
+                }, 3000); // scrollBy보다 먼저 실행돼서 3000으로 수정함
             });
         });
     }

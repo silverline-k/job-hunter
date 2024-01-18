@@ -1,6 +1,6 @@
 mode: 'development'
 url:
-  wanted: 'https://www.wanted.co.kr/wdlist/518/895?country=kr&job_sort=job.latest_order&years=-1&locations=all'
+  wanted: 'https://www.wanted.co.kr/wdlist/518/895?country=kr&job_sort=job.latest_order&years=-1&locations=seoul.all'
 db:
   host: ''
   user: ''

@@ -1,6 +1,6 @@
 import { Pool } from 'mysql2/promise';
 import { ResultSetHeader, RowDataPacket } from 'mysql2';
-import { JobList } from './types/index';
+import { JobList, PositionIndex } from './types/index';
 
 export default class Repository {
     db: Pool;
@@ -9,23 +9,31 @@ export default class Repository {
         this.db = db;
     }
 
-    async getLastPositionIndex(): Promise<number> {
-        const [rows, _] = await this.db.query(`SELECT max(position_index) AS last_position_index FROM job_hunter.job_posting`);
+    async getPositionIndexes(): Promise<Set<PositionIndex>> {
+        const [rows, _] = await this.db.execute(`SELECT position_index FROM job_hunter.job_posting WHERE deleted_at IS NULL`);
+        const positionIndexes = (rows as unknown as RowDataPacket).map((row: {position_index: number}) => row.position_index);
 
-        return (rows as unknown as RowDataPacket)[0].last_position_index;
+        return new Set(positionIndexes);
     }
 
     async addJobPosting(jobList: JobList): Promise<number> {
         const position = 'nodejs';
+        const placeholders = new Array(jobList.length).fill('(?, ?, ?, ?, ?, ?)').join(',');
         const values = jobList
             .map((job) => {
-                return `(${job.id}, '${position}', '${job.positionTitle}', '${job.companyName}', '${job.location}', '${job.url}')`;
-            })
-            .join(',');
+                return {
+                    position_index: job.id,
+                    position_name: position,
+                    position_title: job.positionTitle,
+                    company_name: job.companyName,
+                    company_location: job.location,
+                    url: job.url,
+                };
+            });
 
         try {
-            const result = await this.db.query(`
-                INSERT IGNORE INTO job_hunter.job_posting
+            const result = await this.db.execute(`
+                INSERT INTO job_hunter.job_posting
                 (
                     position_index,
                     position_name,
@@ -34,9 +42,29 @@ export default class Repository {
                     company_location,
                     url
                 )
-                VALUES ${values}
-            `);
+                VALUES ${placeholders}
+                ON DUPLICATE KEY UPDATE deleted_at = CASE
+                    WHEN deleted_at IS NOT NULL THEN NULL
+                    ELSE deleted_at
+                END;
+            `, values);
 
+            return (result[0] as unknown as ResultSetHeader).affectedRows;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async deleteJobPosting(indexList: PositionIndex[]): Promise<number> {
+        const placeholders = new Array(indexList.length).fill('?').join(',');
+
+        try {
+            const result = await this.db.execute(`
+                UPDATE job_hunter.job_posting
+                SET deleted_at = NOW()
+                WHERE position_index IN (${placeholders})
+            `, indexList);
+            
             return (result[0] as unknown as ResultSetHeader).affectedRows;
         } catch (error) {
             throw error;

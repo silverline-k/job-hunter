@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import Crawler from './crawler';
 import { Config } from './types/config';
-import DBConnector from './dbConnector';
+import DBConnector from './db-connector';
 import Repository from './repository';
 
 async function start() {
@@ -23,9 +23,7 @@ async function start() {
     const repository = new Repository(dbConnector.pool);
     const crawler = new Crawler(config as Config, repository);
 
-    // await crawler.init();
-    // await crawler.run();
-    await crawler.getWantedJobList();
+    await crawler.run();
 }
 
 start()
