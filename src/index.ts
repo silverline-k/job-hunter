@@ -2,7 +2,7 @@ import { exit } from 'node:process';
 import yaml from 'js-yaml';
 import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
-// import schedule from 'node-schedule';
+import schedule from 'node-schedule';
 import Crawler from './crawler';
 import { Config } from './types/config';
 import DBConnector from './db-connector';
@@ -23,7 +23,16 @@ async function start() {
     const repository = new Repository(dbConnector.pool);
     const crawler = new Crawler(config as Config, repository);
 
-    await crawler.run();
+    try {
+        // 매 시간마다 새로운 채용 공고 있을 시 DB에 저장
+        schedule.scheduleJob('0 * * * *', async () => {
+            console.info(new Date(), 'Job scheduled.');
+            await crawler.run();
+            console.info(new Date(), 'Job completed.');
+        });
+    } catch(err) {
+        throw err;
+    }
 }
 
 start()
