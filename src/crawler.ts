@@ -1,15 +1,21 @@
 import puppeteer, { Page, Browser } from 'puppeteer';
 import userAgent from 'user-agents';
 import { Config } from './types/config';
-import { JobInfo, JobList, PositionIndex } from './types/index';
+import { JobInfo, JobList, PositionIndex, JobDescription } from './types/index';
 import Repository from './repository';
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default class Crawler {
     config: Config;
+    retryCount: number;
+    limitRetryCount: number;
     repository: Repository;
 
     constructor(config: Config, repository: Repository) {
         this.config = config;
+        this.retryCount = 0;
+        this.limitRetryCount = config.limitRetryCount;
         this.repository = repository;
     }
 
@@ -29,12 +35,14 @@ export default class Crawler {
         return browser;
     }
 
-    async setPage(browser: Browser): Promise<Page> {
+    async setPage(browser: Browser, url: string): Promise<Page> {
         const page = await browser.newPage();
 
         // user agent 설정 해줘야 403 안 뜸
         await page.setUserAgent(new userAgent().random().toString());
-        await page.goto(this.config.url.wanted);
+        await page.goto(url);
+
+        await delay(2500);
 
         page.on('console', (msg) => {
             const msgText = msg.text();
@@ -70,16 +78,24 @@ export default class Crawler {
             }
         });
 
-        console.log(`from db => ${positionIndexesFromDB.size} | from wanted => ${positionIndexesFromWanted.size} | new => ${newIndexes.size} | close => ${closedIndexes.size}`);
-
-        // TODO: JD 긁어오기
+        console.log(
+            `from db => ${positionIndexesFromDB.size} | from wanted => ${positionIndexesFromWanted.size} | new => ${newIndexes.size} | close => ${closedIndexes.size}`
+        );
 
         if (closedIndexes.size > 0) {
-            closedJobsCount = await this.repository.deleteJobPosting(Array.from(closedIndexes.values()));
+            closedJobsCount = await this.repository.deleteJobPosting(
+                Array.from(closedIndexes.values())
+            );
             console.log('close count =>', closedJobsCount);
         }
+
+        // 상세내용 가져올 때 오래 걸리기 때문에 나눠서 저장하도록 한다.
         if (newIndexes.size > 0) {
-            // newJobsCount = await this.repository.addJobPosting([]);
+            for (const index of newIndexes) {
+                const jobInfo = await this.getJobPosting(index.toString());
+                const result = await this.repository.addJobPosting([jobInfo]);
+                console.log(new Date(), `index(${newJobsCount + result}) ->`, index);
+            }
         }
 
         console.log(`run: ${newJobsCount} job postings have been added.`);
@@ -87,25 +103,45 @@ export default class Crawler {
     }
 
     async getPositionIndexesFromWanted(): Promise<Set<PositionIndex>> {
+        const url =
+            this.config.url.wanted.default +
+            '/' +
+            this.config.url.wanted.nodejs;
         const browser = await this.launch();
-        const page = await this.setPage(browser);
+        const page = await this.setPage(browser, url);
 
         console.log(new Date(), 'scroll start!');
-
-        await new Promise((resolve) => setTimeout(resolve, 3000));
 
         const jobListWrapperSelector =
             '.JobList_contentWrapper__QiRRW .List_List__FsLch li';
         await page.waitForSelector(jobListWrapperSelector);
 
-        await this.autoScroll(page);
+        try {
+            await this.autoScroll(page, 2000);
+        } catch(err) {
+            if (this.retryCount <= this.limitRetryCount) {
+                await page.close();
+                this.retryCount++;
+
+                return this.getPositionIndexesFromWanted();
+            } else {
+                throw err;
+            }
+        }
 
         const positionIndexList: PositionIndex[] = [];
 
         const jobCards = await page.$$(jobListWrapperSelector);
         for (const jobCard of jobCards) {
-            const positionIndex = await jobCard.$eval('a', (el) => {
-                return el.getAttribute('data-position-id');
+            const positionIndex = await jobCard.$eval('a', (element) => {
+                const reg = /프론트|풀스택|시니어|fullstack|frontend|front-end|devops/; // 필터링
+                const positionTitle = element.getAttribute('data-position-name');
+                console.log('positiontitle', positionTitle)
+                if (positionTitle && !reg.test(positionTitle.toLocaleLowerCase())) {
+                    return element.getAttribute('data-position-id');
+                }
+
+                return null;
             });
 
             if (positionIndex !== null) {
@@ -120,85 +156,119 @@ export default class Crawler {
         return new Set(positionIndexList);
     }
 
-    async getJobCardsFromWanted(page: Page, element: string) {
-        await page.waitForSelector(element);
-
-        const jobList: JobList = [];
-        const jobCards = await page.$$(element);
-        console.log(jobCards);
-
-        for (const jobCard of jobCards) {
-            const jobInfo = await jobCard.$eval('a', (el) => {
-                const id = el.getAttribute('data-position-id');
-                const companyName = el.getAttribute('data-company-name');
-                const positionTitle = el.getAttribute('data-position-name');
-                const location = ''; // TODO: 태그에서 지역 속성 사라졌음, 어디에서 가져올지 정해야함
-                const url = el.href;
-
-                if (
-                    [id, companyName, positionTitle, location, url].includes(
-                        null
-                    )
-                ) {
-                    // TODO: add error message
-                    throw new Error();
-                }
-
-                console.log('check', id);
-
-                return {
-                    id,
-                    companyName,
-                    positionTitle,
-                    location,
-                    url,
-                };
-            });
-
-            if (jobInfo !== null) {
-                jobList.push(jobInfo as JobInfo);
-            }
-        }
-
-        return jobList;
-    }
-
-    async getJobListFromWanted(): Promise<JobList> {
+    async getJobPosting(positionIndex: string): Promise<JobInfo> {
+        const url = this.config.url.wanted.default + '/wd/' + positionIndex;
         const browser = await this.launch();
-        const page = await this.setPage(browser);
+        const page = await this.setPage(browser, url);
 
-        console.log(new Date(), 'scroll start!');
+        // TODO: nodejs 서울 공고만 조회하도록 되어있음. 배포 후 다른 포지션 추가해야 함
+        const position = 'nodejs';
+        const location = '서울';
 
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-
-        const jobListWrapperSelector =
-            '.JobList_contentWrapper__QiRRW .List_List__FsLch li';
+        const jobListWrapperSelector = '.JobContent_descriptionWrapper__SM4UD';
         await page.waitForSelector(jobListWrapperSelector);
 
-        await this.autoScroll(page);
-
-        const jobList = await this.getJobCardsFromWanted(
-            page,
-            jobListWrapperSelector
+        // 상세 정보 더 보기 버튼 있을 경우 클릭해줘야 짤린 정보까지 가져올 수 있음
+        await page.$eval(
+            `${jobListWrapperSelector} button`,
+            (element) => element.click()
         );
 
-        console.log(new Date(), 'scroll finish!');
+        await delay(100);
+
+        const info = await page.evaluate(async () => {
+            const jobHeader = document.body.querySelector(
+                '.JobHeader_JobHeader__Tools__Company__Link__QjFBa'
+            );
+
+            const companyName = jobHeader?.getAttribute('data-company-name');
+            const positionTitle = jobHeader?.getAttribute('data-position-name');
+
+            const jobDescriptionElements = document.body.querySelectorAll(
+                '.JobDescription_JobDescription__paragraph__Iwfqn h3'
+            );
+            const description: JobDescription = {};
+
+            for (const e of jobDescriptionElements) {
+                let category: null | keyof JobDescription = null;
+
+                switch (e.textContent) {
+                    case '주요업무':
+                        category = 'mainResponsibilities';
+                        break;
+                    case '자격요건':
+                        category = 'qualifications';
+                        break;
+                    case '우대사항':
+                        category = 'preferences';
+                        break;
+                    case '혜택 및 복지':
+                        category = 'welfareBenefits';
+                        break;
+                    default:
+                        break;
+                }
+
+                if (category != null) {
+                    description[category] =
+                        e.nextElementSibling?.querySelector('span')?.innerHTML;
+                }
+            }
+
+            const mainResponsibilities = description.mainResponsibilities;
+            const qualifications = description.qualifications;
+            const preferences = description.preferences;
+            const welfareBenefits = description.welfareBenefits;
+            const address = document.body.querySelector(
+                '.JobWorkPlace_JobWorkPlace__map__location__Jksjp span'
+            )?.textContent;
+
+            const closingDateText = document.body.querySelector(
+                '.JobDueTime_JobDueTime__iKbEO span'
+            )?.textContent;
+            const closingDate = closingDateText?.startsWith('상시')
+                ? null
+                : closingDateText;
+
+            return {
+                companyName,
+                positionTitle,
+                companyAddress: address,
+                mainResponsibilities: mainResponsibilities || null,
+                qualifications: qualifications || null,
+                preferences: preferences || null,
+                welfareBenefits: welfareBenefits || null,
+                closingDate,
+            };
+        });
+
+        const jobInfo: any = {
+            ...info,
+            id: Number(positionIndex),
+            companyLocation: location,
+            positionName: position,
+            url,
+        };
 
         await browser.close();
 
-        return jobList as JobList;
+        return jobInfo;
     }
 
-    async autoScroll(page: Page) {
-        await page.evaluate(async () => {
-            await new Promise(async (resolve) => {
+    async scroll(page: Page, height: number): Promise<void> {
+        await page.evaluate(async (height) => {
+            await new Promise(async (resolve, reject) => {
                 let totalHeight = 0;
 
-                window.scrollTo(0, 2000);
-                await new Promise((resolve) => setTimeout(resolve, 3000));
+                window.scrollTo(0, height);
+                new Promise((resolve) => setTimeout(resolve, 1000));
 
                 const timer = setInterval(async () => {
                     const scrollHeight = document.body.scrollHeight;
+                    if (scrollHeight < height) {
+                        reject(new Error('scroll failed'));
+                    }
+
                     console.log(
                         `check - height: ${scrollHeight}, total: ${totalHeight}`
                     );
@@ -207,12 +277,40 @@ export default class Crawler {
 
                     if (totalHeight === scrollHeight) {
                         clearInterval(timer);
-                        resolve(true);
+                        resolve('success');
                     }
 
                     totalHeight = scrollHeight;
                 }, 3000); // scrollBy보다 먼저 실행돼서 3000으로 수정함
             });
-        });
+        }, height);
+    }
+
+    // 비동기 이슈 때문에 최대 3회까지 재실행
+    async autoScroll(page: Page, height: number): Promise<void> {
+        const MAX_COUNT = 3;
+        let retryCount = 0;
+
+        while (retryCount < MAX_COUNT) {
+            try {
+                await this.scroll(page, height);
+
+                return;
+            } catch (err) {
+                if (err instanceof Error) {
+                    if (err.message.startsWith('scroll failed')) {
+                        retryCount++;
+                    }
+                } else {
+                    throw err;
+                }
+            }
+
+            await delay(2000);
+        }
+
+        if (retryCount === MAX_COUNT) {
+            throw new Error('Maximum count exceeded');
+        }
     }
 }
