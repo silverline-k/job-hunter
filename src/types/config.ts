@@ -1,7 +1,10 @@
-export type Config = {
+export interface Config {
     mode: string;
     url: {
-        wanted: string;
+        wanted: {
+            default: string;
+            nodejs: string;
+        };
     };
     db: {
         host: string;
@@ -9,5 +12,6 @@ export type Config = {
         password: string;
         database: string;
         port: number;
-    }
-};
+    };
+    limitRetryCount: number;
+}

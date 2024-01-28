@@ -2,9 +2,10 @@ import { exit } from 'node:process';
 import yaml from 'js-yaml';
 import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
+// import schedule from 'node-schedule';
 import Crawler from './crawler';
 import { Config } from './types/config';
-import DBConnector from './dbConnector';
+import DBConnector from './db-connector';
 import Repository from './repository';
 
 async function start() {
@@ -15,17 +16,14 @@ async function start() {
     );
 
     if (config == null) {
-        // TODO: add error message
-        throw new Error();
+        throw new Error('Configuration not found or undefined.');
     }
 
     const dbConnector = new DBConnector(config as Config);
     const repository = new Repository(dbConnector.pool);
     const crawler = new Crawler(config as Config, repository);
 
-    // await crawler.init();
-    // await crawler.run();
-    await crawler.getWantedJobList();
+    await crawler.run();
 }
 
 start()
