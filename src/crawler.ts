@@ -3,6 +3,7 @@ import userAgent from 'user-agents';
 import { Config } from './types/config';
 import { JobInfo, PositionIndex, JobDescription } from './types/index';
 import Repository from './repository';
+import { DiscordConnector } from './discord-connector';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -11,12 +12,18 @@ export default class Crawler {
     retryCount: number;
     limitRetryCount: number;
     repository: Repository;
+    discordConnector: DiscordConnector;
 
-    constructor(config: Config, repository: Repository) {
+    constructor(
+        config: Config,
+        repository: Repository,
+        discordConnector: DiscordConnector
+    ) {
         this.config = config;
         this.retryCount = 0;
         this.limitRetryCount = config.limitRetryCount;
         this.repository = repository;
+        this.discordConnector = discordConnector;
     }
 
     async launch(): Promise<Browser> {
@@ -94,9 +101,14 @@ export default class Crawler {
             for (const index of newIndexes) {
                 const jobInfo = await this.getJobPosting(index.toString());
                 const result = await this.repository.addJobPosting([jobInfo]);
+                newJobsCount = newJobsCount + result;
+
+                const data = this.discordConnector.parseData(jobInfo);
+                this.discordConnector.send(data);
+
                 console.log(
                     new Date(),
-                    `index(${newJobsCount + result}) ->`,
+                    `index(${newJobsCount}) ->`,
                     index
                 );
             }

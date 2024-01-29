@@ -21,22 +21,24 @@ async function start() {
     }
 
     const discordConnector = new DiscordConnector(config as Config);
-    const dbConnector = new DBConnector(config as Config);
-    const repository = new Repository(dbConnector.pool);
-    const crawler = new Crawler(config as Config, repository);
-
     await discordConnector.init();
 
-    // try {
-    //     // 매 시간마다 새로운 채용 공고 있을 시 DB에 저장
-    //     schedule.scheduleJob('0 * * * *', async () => {
-    //         console.info(new Date(), 'Job scheduled.');
-    //         await crawler.run();
-    //         console.info(new Date(), 'Job completed.');
-    //     });
-    // } catch (err) {
-    //     throw err;
-    // }
+    const dbConnector = new DBConnector(config as Config);
+    const repository = new Repository(dbConnector.pool);
+    const crawler = new Crawler(config as Config, repository, discordConnector);
+
+    try {
+        // 매 시간마다 새로운 채용 공고 있을 시 DB에 저장하고 디스코드봇으로 알려줌
+        schedule.scheduleJob('0 * * * *', async () => {
+            console.info(new Date(), 'Job scheduled.');
+
+            await crawler.run();
+
+            console.info(new Date(), 'Job completed.');
+        });
+    } catch (err) {
+        throw err;
+    }
 }
 
 start()

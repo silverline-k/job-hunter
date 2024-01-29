@@ -1,6 +1,14 @@
-import { Client, GatewayIntentBits, REST, Routes } from 'discord.js';
+import {
+    APIEmbed,
+    Client,
+    GatewayIntentBits,
+    REST,
+    Routes,
+    TextChannel,
+} from 'discord.js';
 import { Config } from './types/config';
 import { commands } from './commands';
+import { JobInfo } from './types';
 
 export class DiscordConnector {
     config: Config;
@@ -69,8 +77,52 @@ export class DiscordConnector {
         });
     }
 
-    // TODO: 메시지 보낼 때 포맷팅 필수
-    async sendMessage() {
-        this.client.on('message', (msg) => {});
+    parseData(jobInfo: JobInfo): APIEmbed {
+        // 너무 길어지면 보기 힘들어서 150으로 줄임
+        const VALUE_LIMIT = 150; // 최대 1024
+
+        const fields = [
+            { name: '주요업무', value: jobInfo.mainResponsibilities || '' },
+            { name: '자격요건', value: jobInfo.qualifications || '' },
+            { name: '우대사항', value: jobInfo.preferences || '' },
+            { name: '혜택 및 복지', value: jobInfo.welfareBenefits || '' },
+        ].map((obj) => {
+            let value = obj.value;
+
+            if (obj.value.length > 0) {
+                value = value
+                    .split('<br>')
+                    .filter((value) => value.length > 0)
+                    .join('\n');
+            }
+
+            if (obj.value.length > VALUE_LIMIT) {
+                value = value.substring(0, VALUE_LIMIT - 1) + '...';
+            }
+
+            return {
+                name: obj.name,
+                value: value,
+            };
+        });
+
+        return {
+            title: jobInfo.positionTitle,
+            author: {
+                name: jobInfo.companyName,
+            },
+            url: jobInfo.url,
+            fields,
+        };
+    }
+
+    send(data: APIEmbed): void {
+        for (const subscriber of this.subscribers) {
+            const channel = this.client.channels.cache.get(subscriber);
+
+            if (channel) {
+                (channel as TextChannel).send({ embeds: [data] });
+            }
+        }
     }
 }
