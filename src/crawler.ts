@@ -1,7 +1,7 @@
 import puppeteer, { Page, Browser } from 'puppeteer';
 import userAgent from 'user-agents';
 import { Config } from './types/config';
-import { JobInfo, JobList, PositionIndex, JobDescription } from './types/index';
+import { JobInfo, PositionIndex, JobDescription } from './types/index';
 import Repository from './repository';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -94,7 +94,11 @@ export default class Crawler {
             for (const index of newIndexes) {
                 const jobInfo = await this.getJobPosting(index.toString());
                 const result = await this.repository.addJobPosting([jobInfo]);
-                console.log(new Date(), `index(${newJobsCount + result}) ->`, index);
+                console.log(
+                    new Date(),
+                    `index(${newJobsCount + result}) ->`,
+                    index
+                );
             }
         }
 
@@ -118,7 +122,7 @@ export default class Crawler {
 
         try {
             await this.autoScroll(page, 2000);
-        } catch(err) {
+        } catch (err) {
             if (this.retryCount <= this.limitRetryCount) {
                 await page.close();
                 this.retryCount++;
@@ -134,10 +138,15 @@ export default class Crawler {
         const jobCards = await page.$$(jobListWrapperSelector);
         for (const jobCard of jobCards) {
             const positionIndex = await jobCard.$eval('a', (element) => {
-                const reg = /프론트|풀스택|시니어|fullstack|frontend|front-end|devops/; // 필터링
-                const positionTitle = element.getAttribute('data-position-name');
-                console.log('positiontitle', positionTitle)
-                if (positionTitle && !reg.test(positionTitle.toLocaleLowerCase())) {
+                const reg =
+                    /프론트|풀스택|시니어|fullstack|frontend|front-end|devops/; // 필터링
+                const positionTitle =
+                    element.getAttribute('data-position-name');
+                console.log('positiontitle', positionTitle);
+                if (
+                    positionTitle &&
+                    !reg.test(positionTitle.toLocaleLowerCase())
+                ) {
                     return element.getAttribute('data-position-id');
                 }
 
@@ -169,9 +178,8 @@ export default class Crawler {
         await page.waitForSelector(jobListWrapperSelector);
 
         // 상세 정보 더 보기 버튼 있을 경우 클릭해줘야 짤린 정보까지 가져올 수 있음
-        await page.$eval(
-            `${jobListWrapperSelector} button`,
-            (element) => element.click()
+        await page.$eval(`${jobListWrapperSelector} button`, (element) =>
+            element.click()
         );
 
         await delay(100);

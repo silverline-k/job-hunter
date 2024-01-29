@@ -12,6 +12,7 @@
   "author": "kk.silverline@gmail.com",
   "license": "ISC",
   "dependencies": {
+    "discord.js": "^14.14.1",
     "js-yaml": "^4.1.0",
     "mysql2": "^3.6.5",
     "node-schedule": "^2.1.1",
