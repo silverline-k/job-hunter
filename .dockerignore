@@ -1,0 +1,9 @@
+.dockerignore
+node_modules
+schema.sql
+dist
+.git
+.gitignore
+.npmrc
+config.yml
+memo.md
