@@ -10,3 +10,6 @@ db:
   database: ''
   port: 3306
 limitRetryCount: 3
+discord:
+  clientId: 'client-id'
+  clientToken: 'client-token'

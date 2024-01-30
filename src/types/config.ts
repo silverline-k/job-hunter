@@ -14,4 +14,8 @@ export interface Config {
         port: number;
     };
     limitRetryCount: number;
+    discord: {
+        clientId: string;
+        clientToken: string;
+    };
 }

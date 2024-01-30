@@ -38,7 +38,7 @@ export default class Repository {
                 job.qualifications,
                 job.preferences,
                 job.welfareBenefits,
-                job.closingDate,
+                job.closingDate
             );
 
             return acc;
@@ -68,7 +68,7 @@ export default class Repository {
                     ELSE deleted_at
                 END;
             `,
-                values,
+                values
             );
 
             return (result[0] as unknown as ResultSetHeader).affectedRows;
