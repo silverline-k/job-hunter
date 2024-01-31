@@ -4,8 +4,7 @@ import { Config } from './types/config';
 import { JobInfo, PositionIndex, JobDescription } from './types/index';
 import Repository from './repository';
 import { DiscordConnector } from './discord-connector';
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+import { delay } from './utils/async';
 
 export default class Crawler {
     config: Config;
