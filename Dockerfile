@@ -1,6 +1,7 @@
 ARG ALPINE_VERSION=3.16
 
 FROM node:18.9.0-alpine${ALPINE_VERSION} AS builder
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 WORKDIR /build-stage
 COPY package*.json ./
 RUN npm ci
@@ -9,10 +10,11 @@ COPY . ./
 RUN npm run build
 
 FROM alpine:${ALPINE_VERSION}
+ENV CHROME_PATH="/usr/bin/chromium-browser"
 # Create app directory
 WORKDIR /usr/src/app
 # Add required binaries
-RUN apk add --no-cache libstdc++ dumb-init \
+RUN apk add --no-cache libstdc++ dumb-init chromium nss ca-certificates \
     && addgroup -g 1000 node && adduser -u 1000 -G node -s \bin\sh -D node \
     && chown node:node ./
 # Update the following COPY lines based on your codebase
