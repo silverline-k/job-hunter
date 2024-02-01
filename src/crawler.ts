@@ -36,6 +36,7 @@ export default class Crawler {
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
             ],
+            executablePath: process.env.CHROME_PATH || undefined,
         });
 
         return browser;
