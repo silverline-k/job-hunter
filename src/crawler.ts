@@ -1,5 +1,6 @@
 import puppeteer, { Page, Browser } from 'puppeteer';
 import userAgent from 'user-agents';
+import schedule from 'node-schedule';
 import { Config } from './types/config';
 import { JobInfo, PositionIndex, JobDescription } from './types/index';
 import Repository from './repository';
@@ -61,6 +62,24 @@ export default class Crawler {
         return page;
     }
 
+    async init() {
+        this.discordConnector.cb = this.run.bind(this);
+
+        try {
+            // 매 시간마다 새로운 채용 공고 있을 시 DB에 저장하고 디스코드봇으로 알려줌
+            schedule.scheduleJob('0 * * * *', async () => {
+                console.info(new Date(), 'Job scheduled.');
+
+                await this.run();
+
+                console.info(new Date(), 'Job completed.');
+            });
+        } catch (err) {
+            throw err;
+        }
+    }
+
+    // TODO: 함수이름 변경
     async run() {
         let newJobsCount = 0;
         let closedJobsCount = 0;
@@ -106,11 +125,7 @@ export default class Crawler {
                 const data = this.discordConnector.parseData(jobInfo);
                 this.discordConnector.send(data);
 
-                console.log(
-                    new Date(),
-                    `index(${newJobsCount}) ->`,
-                    index
-                );
+                console.log(new Date(), `index(${newJobsCount}) ->`, index);
             }
         }
 
@@ -308,10 +323,9 @@ export default class Crawler {
 
     // 비동기 이슈 때문에 최대 3회까지 재실행
     async autoScroll(page: Page, height: number): Promise<void> {
-        const MAX_COUNT = 3;
         let retryCount = 0;
 
-        while (retryCount < MAX_COUNT) {
+        while (retryCount < this.limitRetryCount) {
             try {
                 await this.scroll(page, height);
 
@@ -329,7 +343,7 @@ export default class Crawler {
             await delay(2000);
         }
 
-        if (retryCount === MAX_COUNT) {
+        if (retryCount === this.limitRetryCount) {
             throw new Error('Maximum count exceeded');
         }
     }

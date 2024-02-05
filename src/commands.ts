@@ -10,5 +10,9 @@ export const commands = [
     {
         name: 'unsubscribe',
         description: '원티드 사이트의 nodejs 채용 공고를 구독해지합니다.',
+    },
+    {
+        name: 'now',
+        description: 'docker puppeteer 디버깅용(test)',
     }
 ]

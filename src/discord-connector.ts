@@ -2,6 +2,7 @@ import {
     APIEmbed,
     Client,
     GatewayIntentBits,
+    Interaction,
     REST,
     Routes,
     TextChannel,
@@ -9,11 +10,13 @@ import {
 import { Config } from './types/config';
 import { commands } from './commands';
 import { JobInfo } from './types';
+import { delay } from './utils/async';
 
 export class DiscordConnector {
     config: Config;
     client: Client;
     subscribers: Set<string>;
+    cb: Function | null;
 
     constructor(config: Config) {
         this.config = config;
@@ -24,6 +27,7 @@ export class DiscordConnector {
             ],
         });
         this.subscribers = new Set<string>();
+        this.cb = null;
     }
 
     async setCommands() {
@@ -36,6 +40,24 @@ export class DiscordConnector {
         console.info('Successfully reloaded application (/) commands.');
     }
 
+    // TODO: https 503 error handling
+    async reply(interaction: Interaction, message: string) {
+        let retryCount = 0;
+
+        while(retryCount < this.config.limitRetryCount) {
+            try {
+                // interaction.reply(message);
+            } catch (err) {
+
+            }
+        }
+
+        if (retryCount === this.config.limitRetryCount) {
+            console.error();
+            throw new Error();
+        }
+    }
+
     async init() {
         await this.setCommands();
 
@@ -45,7 +67,7 @@ export class DiscordConnector {
             console.log(`Logged in as ${this.client.user?.tag}`);
         });
 
-        this.client.on('interactionCreate', (interaction) => {
+        this.client.on('interactionCreate', async (interaction) => {
             if (!interaction.isCommand()) return;
 
             const { commandName, channel } = interaction;
@@ -68,6 +90,13 @@ export class DiscordConnector {
                     this.subscribers.delete(channelId);
                     interaction.reply('구독해지 완료!');
                     console.info('unsubscribe:', channelId);
+                    break;
+                case 'now':
+                    if (this.cb) {
+                        interaction.reply('지금 새로운 채용 공고가 있는지 바로 확인해보겠습니덩ㅋ');
+                        await this.cb();
+                        console.info('now');
+                    }
                     break;
                 default:
                     interaction.reply('추가되지 않은 커맨드입니다.');
