@@ -3,3 +3,4 @@ config.yml
 dist
 cli.md
 memo.md
+.vscode
