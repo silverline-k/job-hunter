@@ -5,9 +5,7 @@ name: job-hunter CI/CD
 
 on:
   push:
-    branches: [ "main" , "test"]
-  pull_request:
-    branches: [ "main" ]
+    branches: [ "main" , "cicd"]
 
 jobs:
   build:
@@ -19,21 +17,26 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
+
       - name: Install dependencies
         run: npm ci
+
       - name: Build job-hunter
         run: npm run build --if-present
       # - run: npm test
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build Dockerfile & Push to Docker Hub
         uses: docker/build-push-action@v5
         with:
@@ -41,20 +44,9 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/job-hunter:latest
 
-  # deploy:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     # - name: Login to Amazon EC2
-  #     - name: Deploy to Amazon EC2
-  #       uses: appleboy/ssh-actions # 뒤에 @master 붙여도 되는건지?
-  #       with:
-  #         host: ${{}}
-  #         username: ${{}}
-  #         password: ${{}}
-  #         port: ${{}}
-  #         script: |
-  #           docker stop
-  #           docker rm
-  #           docker pull
-  #           docker run
+  deploy:
+    needs: build
+    runs-on: self-hosted
+    steps:
+      - name: Deploy to Amazon EC2
+        run: sh deploy/deploy.sh
