@@ -3,6 +3,7 @@ node_modules
 schema.sql
 dist
 .git
+.github
 .gitignore
 .npmrc
 config.yml

@@ -49,4 +49,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Deploy to Amazon EC2
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
         run: sh /home/ubuntu/deploy/deploy.sh
