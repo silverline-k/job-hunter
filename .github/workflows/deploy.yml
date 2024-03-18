@@ -6,6 +6,8 @@ name: job-hunter CI/CD
 on:
   push:
     branches: [ "main" ]
+    paths-ignore:
+      - "**/README.md"
 
 jobs:
   build:
