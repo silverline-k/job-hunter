@@ -94,8 +94,13 @@ export class DiscordConnector {
                 case 'now':
                     if (this.cb) {
                         interaction.reply('지금 새로운 채용 공고가 있는지 바로 확인해보겠습니덩ㅋ');
-                        await this.cb();
-                        console.info('now');
+                        
+                        try {
+                            await this.cb();
+                            console.info('now command succeeded');
+                        } catch (err) {
+                            interaction.reply('오류 발생으로 인해 가져오지 못했습니다 ㅠㅠ');
+                        }
                     }
                     break;
                 default:
