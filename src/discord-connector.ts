@@ -96,10 +96,10 @@ export class DiscordConnector {
                         interaction.reply('지금 새로운 채용 공고가 있는지 바로 확인해보겠습니덩ㅋ');
                         
                         try {
-                            await this.cb();
+                            await this.cb(); // crawler.run() 함수 실행, cb 함수이름 이름 변경해야겠당
                             console.info('now command succeeded');
                         } catch (err) {
-                            interaction.reply('오류 발생으로 인해 가져오지 못했습니다 ㅠㅠ');
+                            interaction.followUp('오류 발생으로 인해 가져오지 못했습니다 ㅠㅠ');
                         }
                     }
                     break;
