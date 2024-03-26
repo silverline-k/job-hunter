@@ -166,7 +166,7 @@ export default class Crawler {
         for (const jobCard of jobCards) {
             const positionIndex = await jobCard.$eval('a', (element) => {
                 const reg =
-                    /프론트|풀스택|시니어|fullstack|frontend|front-end|devops/; // 필터링
+                    /프론트|풀스택|시니어|fullstack|frontend|front-end|devops|senior/; // 필터링
                 const positionTitle =
                     element.getAttribute('data-position-name');
                 console.log('positiontitle', positionTitle);
