@@ -6,7 +6,7 @@ import Crawler from './crawler';
 import { Config } from './types/config';
 import DBConnector from './db-connector';
 import Repository from './repository';
-import { DiscordConnector } from './discord-connector';
+// import { DiscordConnector } from './discord-connector';
 
 async function start() {
     console.info('Starting The Job Hunter');
@@ -19,13 +19,16 @@ async function start() {
         throw new Error('Configuration not found or undefined.');
     }
 
-    const discordConnector = new DiscordConnector(config as Config);
-    await discordConnector.init();
+    // const discordConnector = new DiscordConnector(config as Config);
+    // await discordConnector.init();
 
     const dbConnector = new DBConnector(config as Config);
     const repository = new Repository(dbConnector.pool);
 
-    const crawler = new Crawler(config as Config, repository, discordConnector);
+    console.log('DB 연결 완료.');
+
+    // const crawler = new Crawler(config as Config, repository, discordConnector);
+    const crawler = new Crawler(config as Config, repository);
     await crawler.init();
 }
 

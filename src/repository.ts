@@ -11,7 +11,7 @@ export default class Repository {
 
     async getPositionIndexes(): Promise<Set<PositionIndex>> {
         const [rows, _] = await this.db.execute(
-            `SELECT position_index FROM job_hunter.job_posting WHERE deleted_at IS NULL`
+            `SELECT position_index FROM job_posting WHERE deleted_at IS NULL`
         );
         const positionIndexes = (rows as unknown as RowDataPacket).map(
             (row: { position_index: number }) => row.position_index
@@ -47,7 +47,7 @@ export default class Repository {
         try {
             const result = await this.db.execute(
                 `
-                INSERT INTO job_hunter.job_posting
+                INSERT INTO job_posting
                 (
                     position_index,
                     position_name,
@@ -56,10 +56,10 @@ export default class Repository {
                     company_location,
                     company_address,
                     url,
-                    mainResponsibilities,
+                    main_responsibilities,
                     qualifications,
                     preferences,
-                    welfareBenefits,
+                    welfare_benefits,
                     closing_date
                 )
                 VALUES ${placeholders}
@@ -83,7 +83,7 @@ export default class Repository {
         try {
             const result = await this.db.execute(
                 `
-                UPDATE job_hunter.job_posting
+                UPDATE job_posting
                 SET deleted_at = NOW()
                 WHERE position_index IN (${placeholders})
             `,

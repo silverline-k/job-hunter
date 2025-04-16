@@ -1,29 +1,30 @@
 import puppeteer, { Page, Browser } from 'puppeteer';
 import userAgent from 'user-agents';
-import schedule from 'node-schedule';
+// import schedule from 'node-schedule';
 import { Config } from './types/config';
 import { JobInfo, PositionIndex, JobDescription } from './types/index';
 import Repository from './repository';
-import { DiscordConnector } from './discord-connector';
+// import { DiscordConnector } from './discord-connector';
 import { delay } from './utils/async';
+import fs from 'node:fs';
 
 export default class Crawler {
     config: Config;
     retryCount: number;
     limitRetryCount: number;
     repository: Repository;
-    discordConnector: DiscordConnector;
+    // discordConnector: DiscordConnector;
 
     constructor(
         config: Config,
         repository: Repository,
-        discordConnector: DiscordConnector
+        // discordConnector: DiscordConnector
     ) {
         this.config = config;
         this.retryCount = 0;
         this.limitRetryCount = config.limitRetryCount;
         this.repository = repository;
-        this.discordConnector = discordConnector;
+        // this.discordConnector = discordConnector;
     }
 
     async launch(): Promise<Browser> {
@@ -63,17 +64,17 @@ export default class Crawler {
     }
 
     async init() {
-        this.discordConnector.cb = this.run.bind(this);
+        // this.discordConnector.cb = this.run.bind(this);
 
         try {
             // 매 시간마다 새로운 채용 공고 있을 시 DB에 저장하고 디스코드봇으로 알려줌
-            schedule.scheduleJob('0 * * * *', async () => {
-                console.info(new Date(), 'Job scheduled.');
+            // schedule.scheduleJob('0 * * * *', async () => {
+            console.info(new Date(), 'Job scheduled.');
 
-                await this.run();
+            await this.run();
 
-                console.info(new Date(), 'Job completed.');
-            });
+            console.info(new Date(), 'Job completed.');
+            // });
         } catch (err) {
             throw err;
         }
@@ -122,8 +123,8 @@ export default class Crawler {
                 const result = await this.repository.addJobPosting([jobInfo]);
                 newJobsCount = newJobsCount + result;
 
-                const data = this.discordConnector.parseData(jobInfo);
-                this.discordConnector.send(data);
+                // const data = this.discordConnector.parseData(jobInfo);
+                // this.discordConnector.send(data);
 
                 console.log(new Date(), `index(${newJobsCount}) ->`, index);
             }
@@ -144,7 +145,7 @@ export default class Crawler {
         console.log(new Date(), 'scroll start!');
 
         const jobListWrapperSelector =
-            '.JobList_contentWrapper__QiRRW .List_List__FsLch li';
+            '.JobList_JobList__contentWrapper__QuyH1 li';
         await page.waitForSelector(jobListWrapperSelector);
 
         try {
@@ -192,6 +193,7 @@ export default class Crawler {
         return new Set(positionIndexList);
     }
 
+    // TODO: 실패 했을 때 재시도 필요 >> Error: net::ERR_CONNECTION_REFUSED at https://www.wanted.co.kr/wd/{positionIndex}
     async getJobPosting(positionIndex: string): Promise<JobInfo> {
         const url = this.config.url.wanted.default + '/wd/' + positionIndex;
         const browser = await this.launch();
@@ -201,7 +203,7 @@ export default class Crawler {
         const position = 'nodejs';
         const location = '서울';
 
-        const jobListWrapperSelector = '.JobContent_descriptionWrapper__SM4UD';
+        const jobListWrapperSelector = '.JobContent_descriptionWrapper__RMlfm';
         await page.waitForSelector(jobListWrapperSelector);
 
         // 상세 정보 더 보기 버튼 있을 경우 클릭해줘야 짤린 정보까지 가져올 수 있음
@@ -213,14 +215,14 @@ export default class Crawler {
 
         const info = await page.evaluate(async () => {
             const jobHeader = document.body.querySelector(
-                '.JobHeader_JobHeader__Tools__Company__Link__QjFBa'
+                '.JobHeader_JobHeader__Tools__Company__Link__NoBQI'
             );
 
             const companyName = jobHeader?.getAttribute('data-company-name');
             const positionTitle = jobHeader?.getAttribute('data-position-name');
 
             const jobDescriptionElements = document.body.querySelectorAll(
-                '.JobDescription_JobDescription__paragraph__Iwfqn h3'
+                '.JobDescription_JobDescription__paragraph__87w8I h3'
             );
             const description: JobDescription = {};
 
@@ -255,11 +257,11 @@ export default class Crawler {
             const preferences = description.preferences;
             const welfareBenefits = description.welfareBenefits;
             const address = document.body.querySelector(
-                '.JobWorkPlace_JobWorkPlace__map__location__Jksjp span'
+                '.JobWorkPlace_JobWorkPlace__map__location__6pp2d span'
             )?.textContent;
 
             const closingDateText = document.body.querySelector(
-                '.JobDueTime_JobDueTime__iKbEO span'
+                '.JobDueTime_JobDueTime__yvhtg span'
             )?.textContent;
             const closingDate = closingDateText?.startsWith('상시')
                 ? null
